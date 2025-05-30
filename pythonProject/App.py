@@ -6,6 +6,7 @@ import pandas as pd
 from fpdf import FPDF
 import tempfile
 import os
+import numpy as np
 
 # Enhanced WhatsApp-like UI with patterned background
 st.markdown("""
@@ -56,6 +57,14 @@ st.sidebar.title("WhatsApp Chat Analyzer")
 
 uploaded_file = st.sidebar.file_uploader("Choose a file")
 if uploaded_file is not None:
+    # Only clear figures and reset PDF state if a new file is uploaded
+    if 'last_uploaded_file' not in st.session_state or st.session_state['last_uploaded_file'] != uploaded_file.name:
+        st.session_state['figures'] = []
+        st.session_state['pdf_ready'] = False
+        base_name = uploaded_file.name.rsplit('.', 1)[0]
+        pdf_file_name = base_name + ".pdf"
+        st.session_state['pdf_file_name'] = pdf_file_name
+        st.session_state['last_uploaded_file'] = uploaded_file.name
     # Convert the uploaded file to string
     data = uploaded_file.getvalue().decode("utf-8")
 
@@ -108,7 +117,7 @@ if uploaded_file is not None:
         ax1.set_ylabel('Message Count')
         ax1.set_title('Monthly Timeline')
         st.pyplot(fig1)
-        figures.append(("Monthly Timeline", fig1))
+        st.session_state['figures'].append(("Monthly Timeline", fig1))
 
         # Daily Timeline
         st.title("Daily Timeline")
@@ -120,7 +129,7 @@ if uploaded_file is not None:
         ax2.set_title('Daily Timeline')
         plt.xticks(rotation='vertical')
         st.pyplot(fig2)
-        figures.append(("Daily Timeline", fig2))
+        st.session_state['figures'].append(("Daily Timeline", fig2))
 
         # Activity Map
         st.title('Activity Map')
@@ -133,7 +142,7 @@ if uploaded_file is not None:
             ax3.bar(busy_day.index, busy_day.values, color='purple')
             plt.xticks(rotation='vertical')
             st.pyplot(fig3)
-            figures.append(("Most Busy Day", fig3))
+            st.session_state['figures'].append(("Most Busy Day", fig3))
 
         with col2:
             st.header("Most Busy Month")
@@ -142,14 +151,14 @@ if uploaded_file is not None:
             ax4.bar(busy_month.index, busy_month.values, color='orange')
             plt.xticks(rotation='vertical')
             st.pyplot(fig4)
-            figures.append(("Most Busy Month", fig4))
+            st.session_state['figures'].append(("Most Busy Month", fig4))
 
         st.title("Weekly Activity Map")
         user_heatmap = helper.activity_heatmap(selected_user, df)
         fig5, ax5 = plt.subplots()
         sns.heatmap(user_heatmap, ax=ax5)
         st.pyplot(fig5)
-        figures.append(("Weekly Activity Map", fig5))
+        st.session_state['figures'].append(("Weekly Activity Map", fig5))
 
         # Most Busy Users
         if selected_user == 'Overall':
@@ -163,9 +172,9 @@ if uploaded_file is not None:
                 ax6.bar(x.index, x.values, color='red')
                 plt.xticks(rotation='vertical')
                 st.pyplot(fig6)
+                st.session_state['figures'].append(("Most Busy Users", fig6))
             with col2:
                 st.dataframe(new_df)
-            figures.append(("Most Busy Users", fig6))
 
         # WordCloud
         st.title("Wordcloud")
@@ -173,7 +182,7 @@ if uploaded_file is not None:
         fig7, ax7 = plt.subplots()
         ax7.imshow(df_wc)
         st.pyplot(fig7)
-        figures.append(("Wordcloud", fig7))
+        st.session_state['figures'].append(("Wordcloud", fig7))
 
         # Most Common Words
         most_common_df = helper.most_common_words(selected_user, df)
@@ -182,7 +191,7 @@ if uploaded_file is not None:
         plt.xticks(rotation='vertical')
         st.title('Most Common Words')
         st.pyplot(fig8)
-        figures.append(("Most Common Words", fig8))
+        st.session_state['figures'].append(("Most Common Words", fig8))
 
         # Emoji Analysis
         emoji_df = helper.emoji_helper(selected_user, df)
@@ -196,53 +205,104 @@ if uploaded_file is not None:
             fig9, ax9 = plt.subplots()
             ax9.pie(emoji_df['count'].head(), labels=emoji_df['emoji'].head(), autopct="%0.2f")
             st.pyplot(fig9)
-        figures.append(("Emoji Analysis", fig9))
+            st.session_state['figures'].append(("Emoji Analysis", fig9))
 
         # Sentiment Analysis
         st.title("Sentiment Analysis")
         df = helper.sentiment_analysis(selected_user, df)
         st.write("Sentiment scores range from -1 (negative) to 1 (positive).")
         st.dataframe(df[['user', 'message', 'sentiment']])
-        figures.append(("Sentiment Analysis", df[['user', 'message', 'sentiment']].to_html()))
+        # Optionally, you can add a chart for sentiment distribution
+        sentiment_counts = df['sentiment'].value_counts()
+        fig10, ax10 = plt.subplots()
+        ax10.bar(sentiment_counts.index, sentiment_counts.values, color=['green', 'red', 'gray'])
+        ax10.set_title('Sentiment Distribution')
+        st.pyplot(fig10)
+        st.session_state['figures'].append(("Sentiment Distribution", fig10))
 
         # If the user uploaded a file, you can process and show a sample of it
         st.title("Sample Data")
         st.dataframe(df.head())
 
-        # At the end, add the PDF generation and download logic using session state
-        if st.button("Generate PDF Report"):
-            st.session_state['pdf_bytes'] = generate_pdf(figures)
-            st.session_state['pdf_ready'] = True
+        # After all your analysis and chart creation code
+        st.write("Number of charts to include in PDF:", len(figures))
+
+        if not figures:
+            st.warning("Please upload a chat file and run the analysis before generating the PDF.")
+        else:
+            if st.button("Generate PDF Report"):
+                st.session_state['pdf_bytes'] = generate_pdf(figures)
+                st.session_state['pdf_ready'] = True
 
         if st.session_state.get('pdf_ready', False):
             st.download_button(
                 label="Download PDF",
                 data=st.session_state['pdf_bytes'],
-                file_name="dashboard.pdf",
+                file_name=st.session_state.get('pdf_file_name', 'dashboard.pdf'),
                 mime="application/pdf"
             )
 
 def generate_pdf(figures):
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     pdf.set_font("Arial", size=16)
     pdf.cell(200, 10, txt="WhatsApp Chat Analysis Dashboard", ln=True, align='C')
     pdf.ln(10)
+    image_paths = []
     for title, fig in figures:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as imgfile:
             fig.savefig(imgfile.name, bbox_inches='tight')
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt=title, ln=True)
-            pdf.image(imgfile.name, w=180)
-            pdf.ln(10)
-            os.unlink(imgfile.name)
+            image_paths.append((title, imgfile.name))
+    for title, img_path in image_paths:
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt=title, ln=True)
+        pdf.image(img_path, w=180)
+        pdf.ln(10)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
         pdf.output(tmpfile.name)
         tmpfile.flush()
         tmpfile.seek(0)
         pdf_bytes = tmpfile.read()
+    # Now delete all image files
+    for _, img_path in image_paths:
+        try:
+            os.unlink(img_path)
+        except Exception:
+            pass
     os.unlink(tmpfile.name)
     return pdf_bytes
+
+plt.rcParams['font.family'] = 'Segoe UI Emoji'
+
+# Ensure session state for figures and PDF bytes
+if 'figures' not in st.session_state:
+    st.session_state['figures'] = []
+if 'pdf_bytes' not in st.session_state:
+    st.session_state['pdf_bytes'] = None
+if 'pdf_ready' not in st.session_state:
+    st.session_state['pdf_ready'] = False
+
+# ... your analysis and chart creation code ...
+# After creating each figure, add it to st.session_state['figures']
+# Example:
+# st.session_state['figures'].append(("Monthly Timeline", fig1))
+
+# At the end, show the number of charts
+st.write("Number of charts to include in PDF:", len(st.session_state['figures']))
+
+if len(st.session_state['figures']) == 0:
+    st.warning("Please upload a chat file and run the analysis before generating the PDF.")
+else:
+    if st.button("Generate PDF Report"):
+        st.session_state['pdf_bytes'] = generate_pdf(st.session_state['figures'])
+        st.session_state['pdf_ready'] = True
+
+if st.session_state['pdf_ready'] and st.session_state['pdf_bytes']:
+    st.download_button(
+        label="Download PDF",
+        data=st.session_state['pdf_bytes'],
+        file_name=st.session_state.get('pdf_file_name', 'dashboard.pdf'),
+        mime="application/pdf"
+    )
 
 

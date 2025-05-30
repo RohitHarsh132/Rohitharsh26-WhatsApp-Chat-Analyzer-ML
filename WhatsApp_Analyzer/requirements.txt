@@ -1,9 +1,0 @@
-streamlit
-matplotlib
-seaborn
-pandas
-wordcloud
-urlextract
-emoji
-fpdf
-textblob 

@@ -38,7 +38,7 @@ def create_wordcloud(selected_user, df):
         return " ".join([word for word in message.lower().split() if word not in stop_words])
 
     wc = WordCloud(width=500, height=500, min_font_size=10, background_color='white')
-    temp['message'] = temp['message'].apply(remove_stop_words)
+    temp.loc[:, 'message'] = temp['message'].apply(remove_stop_words)
     return wc.generate(temp['message'].str.cat(sep=" "))
 
 def most_common_words(selected_user, df):
