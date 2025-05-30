@@ -2,18 +2,31 @@ import re
 import pandas as pd
 
 def preprocess(data):
-    pattern = r'\d{1,2}/\d{1,2}/\d{4},\s\d{1,2}:\d{2}\s[apAP][mM]\s-\s'
+    # Patterns for both 2-digit and 4-digit years, and both AM/PM and am/pm
+    pattern_2d = r'\d{1,2}/\d{1,2}/\d{2},\s\d{1,2}:\d{2}\s[apAP][mM]\s-\s'
+    pattern_4d = r'\d{1,2}/\d{1,2}/\d{4},\s\d{1,2}:\d{2}\s[apAP][mM]\s-\s'
+
+    # Detect which pattern is present
+    if re.findall(pattern_2d, data):
+        pattern = pattern_2d
+        date_format = '%d/%m/%y, %I:%M %p - '
+    elif re.findall(pattern_4d, data):
+        pattern = pattern_4d
+        date_format = '%d/%m/%Y, %I:%M %p - '
+    else:
+        raise ValueError("Date pattern not recognized. Please check your chat file format.")
 
     messages = re.split(pattern, data)[1:]
     dates = re.findall(pattern, data)
 
     df = pd.DataFrame({'user_message': messages, 'message_date': dates})
-    df['message_date'] = pd.to_datetime(df['message_date'], format='%d/%m/%Y, %I:%M %p - ')
+    df['message_date'] = pd.to_datetime(df['message_date'], format=date_format, errors='coerce')
+    df = df.dropna(subset=['message_date'])  # Drop lines that couldn't be parsed
     df.rename(columns={'message_date': 'date'}, inplace=True)
 
     users, messages = [], []
     for message in df['user_message']:
-        entry = re.split('([\w\W]+?):\s', message)
+        entry = re.split(r'([\w\W]+?):\s', message)
         if entry[1:]:
             users.append(entry[1])
             messages.append(" ".join(entry[2:]))

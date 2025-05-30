@@ -3,6 +3,7 @@ from wordcloud import WordCloud
 import pandas as pd
 from collections import Counter
 import emoji
+from textblob import TextBlob
 
 
 extract = URLExtract()
@@ -129,4 +130,23 @@ def create_pdf_summary(df, filename="whatsapp_summary.pdf"):
     pdf.output(filename)
 
     return filename  # Returning filename to be used for download
+
+def sentiment_analysis(selected_user, df):
+    if selected_user != 'Overall':
+        df = df[df['user'] == selected_user]
+
+    sentiments = []
+    for message in df['message']:
+        blob = TextBlob(message)
+        polarity = blob.sentiment.polarity
+        if polarity > 0:
+            sentiment = 'Positive'
+        elif polarity == 0:
+            sentiment = 'Neutral'
+        else:
+            sentiment = 'Negative'
+        sentiments.append(sentiment)
+
+    df['sentiment'] = sentiments
+    return df
 
